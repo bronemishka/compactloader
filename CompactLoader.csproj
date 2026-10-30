@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <OutputType>WinExe</OutputType>
+        <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+        <TargetFramework>net10.0-windows</TargetFramework>
+        <UseWPF>true</UseWPF>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <EnableWindowsTargeting>true</EnableWindowsTargeting>
+        <Platforms>x64;x86</Platforms>
+        <PlatformTarget Condition="'$(Platform)' == '' or '$(Platform)' == 'AnyCPU'">x64</PlatformTarget>
+        <PlatformTarget Condition="'$(Platform)' != '' and '$(Platform)' != 'AnyCPU'">$(Platform)</PlatformTarget>
+        <DebugType>none</DebugType>
+        <DebugSymbols>false</DebugSymbols>
+        <PublishTrimmed>false</PublishTrimmed>
+        <SelfContained>false</SelfContained>
+        <PublishSingleFile>true</PublishSingleFile>
+    </PropertyGroup>
+    <ItemGroup>
+        <Resource Include="Assets\app.ico" />
+        <Compile Remove="Tests\**\*.cs" />
+        <Compile Remove="Tools\**\*.cs" />
+        <EmbeddedResource Remove="Tests\**\*" />
+        <None Remove="Tests\**\bin\**;Tests\**\obj\**" />
+        <None Remove="Tools\**\bin\**;Tools\**\obj\**" />
+    </ItemGroup>
+</Project>

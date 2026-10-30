@@ -1,0 +1,32 @@
+# Build and publish output (including nested test/tool projects)
+[Bb]in/
+[Oo]bj/
+artifacts/
+publish/
+TestResults/
+*.binlog
+*.log
+
+# IDE and per-user settings
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.DotSettings.user
+
+# Local secrets
+.env
+.env.*
+!.env.example
+*.pfx
+*.p12
+
+# OS and temporary files
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.tmp
+*.bak

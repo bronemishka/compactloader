@@ -1,0 +1,19 @@
+<DrawingImage xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
+ <DrawingImage.Drawing>
+  <DrawingGroup>
+   <GeometryDrawing Brush="#111111">
+    <GeometryDrawing.Pen><Pen Brush="#626262" Thickness="8"/></GeometryDrawing.Pen>
+    <GeometryDrawing.Geometry><RectangleGeometry Rect="6,6,244,244" RadiusX="38" RadiusY="38"/></GeometryDrawing.Geometry>
+   </GeometryDrawing>
+   <GeometryDrawing Geometry="M 146,66 L 146,82 M 180,66 L 180,82 M 206,106 L 222,106 M 206,150 L 222,150 M 146,174 L 146,190 M 180,174 L 180,190">
+    <GeometryDrawing.Pen><Pen Brush="#929292" Thickness="10" StartLineCap="Square" EndLineCap="Square"/></GeometryDrawing.Pen>
+   </GeometryDrawing>
+   <GeometryDrawing Geometry="M 122,106 L 122,82 L 206,82 L 206,174 L 122,174 L 122,150">
+    <GeometryDrawing.Pen><Pen Brush="#D2D2D2" Thickness="10" LineJoin="Miter"/></GeometryDrawing.Pen>
+   </GeometryDrawing>
+   <GeometryDrawing Geometry="M 40,128 L 162,128 M 136,102 L 162,128 L 136,154">
+    <GeometryDrawing.Pen><Pen Brush="#F5F5F5" Thickness="14" StartLineCap="Square" EndLineCap="Square" LineJoin="Miter"/></GeometryDrawing.Pen>
+   </GeometryDrawing>
+  </DrawingGroup>
+ </DrawingImage.Drawing>
+</DrawingImage>
