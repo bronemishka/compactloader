@@ -214,9 +214,9 @@ public partial class MainWindow : Window
         if (MethodHint is null) return;
         MethodHint.Text = ((Method.SelectedItem as ComboBoxItem)?.Tag as string) switch
         {
-            "LdrLoadDll" => "Calls the native loader through a small stub.",
-            "ThreadHijacking" => "Runs the loader on an existing thread.",
-            "ManualMap" => "Maps the image directly. TLS and delay imports are not supported.",
+            "LdrLoadDll" => "Native Windows loader through a small stub.",
+            "ThreadHijacking" => "Uses an existing thread; temporarily changes its context.",
+            "ManualMap" => "Experimental. No TLS, delay imports or unload.",
             _ => "Standard Windows loader."
         };
     }

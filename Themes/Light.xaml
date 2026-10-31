@@ -29,4 +29,7 @@
  <SolidColorBrush x:Key="SecondaryText" Color="#3A4E35"/>
  <SolidColorBrush x:Key="AccentInk" Color="#39713C"/>
  <SolidColorBrush x:Key="AccentOutline" Color="#39713C"/>
+ <SolidColorBrush x:Key="MethodNative" Color="#28618B"/>
+ <SolidColorBrush x:Key="MethodAdvanced" Color="#75509D"/>
+ <SolidColorBrush x:Key="MethodExperimental" Color="#865719"/>
 </ResourceDictionary>

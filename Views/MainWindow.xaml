@@ -122,7 +122,10 @@
      <Grid Margin="0,10,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="56"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
       <TextBlock Text="Method" Foreground="{DynamicResource Muted}" FontSize="11" VerticalAlignment="Center"/>
        <ComboBox Grid.Column="1" x:Name="Method" SelectedIndex="0" SelectionChanged="MethodChanged" FontFamily="{StaticResource UiFont}" FontSize="11" AutomationProperties.Name="Library load method">
-        <ComboBoxItem Content="LoadLibraryW" Tag="LoadLibraryW"/><ComboBoxItem Content="LdrLoadDll Stub" Tag="LdrLoadDll"/><ComboBoxItem Content="Thread Hijacking" Tag="ThreadHijacking"/><ComboBoxItem Content="Manual Map" Tag="ManualMap"/>
+        <ComboBoxItem Content="LoadLibraryW" Tag="LoadLibraryW" ContentTemplate="{StaticResource InjectionMethodLabel}" ToolTip="Standard Windows loader. Start here for ordinary native DLLs."/>
+        <ComboBoxItem Content="LdrLoadDll" Tag="LdrLoadDll" ContentTemplate="{StaticResource InjectionMethodLabel}" ToolTip="Native Windows loader, called through a small stub."/>
+        <ComboBoxItem Content="Thread Hijacking" Tag="ThreadHijacking" ContentTemplate="{StaticResource InjectionMethodLabel}" ToolTip="Uses an existing target thread. Advanced method; changes the thread context temporarily."/>
+        <ComboBoxItem Content="Manual Map" Tag="ManualMap" ContentTemplate="{StaticResource InjectionMethodLabel}" ToolTip="Experimental PE mapping. TLS, delay imports and unloading are unsupported."/>
        </ComboBox>
      </Grid>
      <TextBlock x:Name="MethodHint" Text="Standard Windows loader." Foreground="{DynamicResource Subtle}" FontSize="10" Margin="56,5,0,0" TextWrapping="Wrap"/>
