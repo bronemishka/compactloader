@@ -13,11 +13,16 @@ internal static class ManualMapMethod
     // Manual mappings are not in the loader's module list; track them for this session.
     static readonly ConcurrentDictionary<(int Pid, long Started, string Path), nint> mapped = new();
 
-    internal static string Load(Process process, SafeProcessHandle handle, string path)
+    static readonly ConcurrentDictionary<(int Pid, long Started, string Path), nint> retained = new();
+
+    internal static string Load(Process process, SafeProcessHandle handle, string path, IProgress<string>? progress = null)
     {
         var key = (process.Id, process.StartTime.ToUniversalTime().Ticks, path.ToUpperInvariant());
+        if (retained.TryGetValue(key, out var unsafeAddress))
+            throw new InvalidOperationException($"A previous Manual Map attempt retained an image at 0x{unsafeAddress:X}. Restart the target before retrying this DLL.");
         if (mapped.TryGetValue(key, out var previous))
             return $"DLL was manually mapped in this session at 0x{previous:X}. Duplicate load skipped.";
+        progress?.Report("Manual Map: checking PE compatibility.");
         var image = new PortableImage(path); // Reject unsupported images before touching the target.
         var preferred = unchecked((nint)(long)image.Header.ImageBase);
         var address = VirtualAllocEx(handle, preferred, (nuint)image.Bytes.Length, 0x3000, 0x04);
@@ -26,10 +31,15 @@ internal static class ManualMapMethod
         using var remote = new RemoteExecution(handle);
         bool keepImage = false, functionTableRegistered = false;
         nint functionTable = 0;
+        var stage = "relocations";
+        void Stage(string value) { stage = value; progress?.Report("Manual Map: " + value + "."); }
         try
         {
+            Stage("relocations");
             image.Relocate(address);
+            Stage("resolving imports");
             ResolveImports(process, remote, image);
+            Stage("writing image and applying section permissions");
             remote.Write(address, image.Bytes);
             // Default gaps and headers to read-only; apply the section access flags afterward.
             remote.Protect(address, image.Bytes.Length, 0x02);
@@ -45,6 +55,7 @@ internal static class ManualMapMethod
                 remote.Protect(address + section.VirtualAddress, size, protection);
             }
             Check(FlushInstructionCache(handle, address, (nuint)image.Bytes.Length), "FlushInstructionCache (PE image)");
+            Stage("registering exception metadata");
             var exception = image.Header.ExceptionTableDirectory;
             if (image.Is64 && exception.Size != 0)
             {
@@ -59,19 +70,24 @@ internal static class ManualMapMethod
             {
                 // Once initialization begins, DLL code can publish pointers or start threads.
                 // Never unmap it automatically after an initialization failure or timeout.
+                Stage("calling DLL entry point");
                 keepImage = true;
                 if (remote.Call(address + image.Header.AddressOfEntryPoint, address, 1, 0) == 0)
                     throw new InvalidOperationException($"DllMain returned FALSE. Image remains at 0x{address:X}; restart the target before retrying.");
             }
             keepImage = true;
             mapped[key] = address;
+            progress?.Report("Manual Map: initialization completed.");
             return $"Manual Map initialized the image at 0x{address:X}. The image is not registered in the loader module list; unload is not supported.";
         }
         catch (Exception ex)
         {
             if (remote.Uncertain || keepImage)
-                throw new InvalidOperationException($"Manual Map did not complete cleanly. Image retained at 0x{address:X}; do not retry before restarting the target. {ex.Message}", ex);
-            throw;
+            {
+                retained[key] = address;
+                throw new InvalidOperationException($"Manual Map failed during {stage}. Image retained at 0x{address:X}; restart the target before retrying. {ex.Message}", ex);
+            }
+            throw new InvalidOperationException($"Manual Map failed during {stage}. Dependencies already loaded may remain referenced. {ex.Message}", ex);
         }
         finally
         {
@@ -83,7 +99,12 @@ internal static class ManualMapMethod
                     try { keepImage = remote.Call(Export(process, "kernel32.dll", "RtlDeleteFunctionTable"), functionTable) == 0; }
                     catch { keepImage = true; }
                 }
-                if (!keepImage && !VirtualFreeEx(handle, address, 0, 0x8000)) Debug.WriteLine("VirtualFreeEx (PE image) failed.");
+                if (!keepImage && !VirtualFreeEx(handle, address, 0, 0x8000)) keepImage = true;
+                if (keepImage)
+                {
+                    retained[key] = address;
+                    progress?.Report($"Manual Map: cleanup incomplete; image retained at 0x{address:X}. Restart the target before retrying.");
+                }
             }
         }
     }
@@ -118,7 +139,7 @@ internal static class ManualMapMethod
                     ? (nint)(entry & 0xffff)
                     : remote.String(image.Name(checked((int)entry + 2)));
                 var address = remote.Call(getProcAddress, module, symbol);
-                if (address == 0) throw new InvalidOperationException("Unresolved import in " + dependency);
+                if (address == 0) throw new InvalidOperationException($"Unresolved import in {dependency}: " + ((entry & ordinalFlag) != 0 ? "ordinal " + (entry & 0xffff) : image.Name(checked((int)entry + 2))));
                 image.SetPointer(checked(destination + index), unchecked((ulong)address.ToInt64()));
             }
         }

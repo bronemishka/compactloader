@@ -26,6 +26,11 @@ internal sealed class PortableImage
             throw new NotSupportedException("Manual Map does not support static TLS or TLS callbacks. Use a native loader method for this DLL.");
         if (Header.DelayImportTableDirectory.Size != 0)
             throw new NotSupportedException("Manual Map does not support delay-load imports.");
+        var exceptionDirectory = Header.ExceptionTableDirectory;
+        if (Is64 && exceptionDirectory.Size != 0 &&
+            (exceptionDirectory.RelativeVirtualAddress < 0 || exceptionDirectory.Size < 0 ||
+             (long)exceptionDirectory.RelativeVirtualAddress + exceptionDirectory.Size > Header.SizeOfImage || exceptionDirectory.Size % 12 != 0))
+            throw new BadImageFormatException("Invalid x64 runtime function table range or size.");
         Bytes = new byte[Header.SizeOfImage];
         Range(0, Header.SizeOfHeaders);
         if (Header.SizeOfHeaders > file.Length) throw new BadImageFormatException("Truncated PE headers.");
@@ -106,7 +111,7 @@ internal sealed class PortableImage
                 var type = encoded >> 12;
                 if (type == 0) continue;
                 if (type != (Is64 ? 10 : 3)) throw new NotSupportedException("Unsupported PE relocation type: " + type);
-                var rva = checked((int)(page + (uint)(encoded & 0xfff)));
+                var rva = checked((int)((long)page + (encoded & 0xfff)));
                 SetPointer(rva, unchecked(Pointer(rva) + delta));
             }
             cursor = checked(cursor + (int)size);

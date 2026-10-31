@@ -309,8 +309,9 @@ public partial class MainWindow : Window
     {
         if (busy || refreshing || selectedProcess is not { Target: var target } || dllPath is null) return;
         if (!Enum.TryParse<LoadMethod>((Method.SelectedItem as ComboBoxItem)?.Tag as string, out var method)) return;
+        var progress = new Progress<string>(message => { Write(message); Status.Text = message; });
         var path = dllPath; SetBusy(true); Status.Text = "Loading library…";
-        try { Write($"Loading library → {target.Name}, PID {target.Id} / {method}"); Write(await Task.Run(() => Loader.Load(target, path, method))); Status.Text = method == LoadMethod.ManualMap ? "Image initialization completed" : "Library load verified"; }
+        try { Write($"Loading library → {target.Name}, PID {target.Id} / {method}"); Write(await Task.Run(() => Loader.Load(target, path, method, progress))); Status.Text = method == LoadMethod.ManualMap ? "Image initialization completed" : "Library load verified"; }
         catch (Exception ex) { Write("Error: " + ex.Message); Status.Text = "Load not verified. See output."; OutputExpander.IsExpanded = true; }
         finally { SetBusy(false); }
     }

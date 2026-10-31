@@ -15,7 +15,7 @@ internal static class Loader
     {
         Check(IsWow64Process2(process, out var guest, out var host), "IsWow64Process2"); return guest == 0 ? host : guest;
     }
-    internal static string Load(Target target, string filename, LoadMethod method = LoadMethod.LoadLibraryW)
+    internal static string Load(Target target, string filename, LoadMethod method = LoadMethod.LoadLibraryW, IProgress<string>? progress = null)
     {
         if (!Enum.IsDefined(method)) throw new ArgumentOutOfRangeException(nameof(method));
         var path = Path.GetFullPath(filename);
@@ -35,7 +35,7 @@ internal static class Loader
         if (Machine(handle) != (Environment.Is64BitProcess ? 0x8664 : 0x014c)) throw new InvalidOperationException("Process, DLL and loader architectures must match (x64 or x86). ARM64 is not supported.");
         if (FindModule(process, path) != 0) return "DLL is already loaded in the target process. Duplicate load skipped.";
         if (method == LoadMethod.ThreadHijacking) return ThreadHijackMethod.Load(process, handle, path);
-        if (method == LoadMethod.ManualMap) return ManualMapMethod.Load(process, handle, path);
+        if (method == LoadMethod.ManualMap) return ManualMapMethod.Load(process, handle, path, progress);
         if (method == LoadMethod.LdrLoadDll)
         {
             NativeLoaderStub.Load(process, handle, path);

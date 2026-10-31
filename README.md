@@ -147,3 +147,11 @@ dotnet run --project Tools/IconGenerator/IconGenerator.csproj -- Assets/AppIcon.
 Знак приложения — монохромная стрелка, входящая в микросхему: обозначение внедрения DLL. Иконка нейтральна к выбранной теме и акценту.
 
 Во всём интерфейсе используется общий моноширинный шрифт Cascadia Mono; если он не установлен, WPF использует Consolas. Шрифт задаётся ресурсом UiFont в Themes/Controls.xaml, включая кнопки, выпадающие панели, журнал и подсказки.
+
+### Manual Map diagnostics and recovery
+
+Manual Map reports its current stage in Output. Import failures include the dependency and symbol (or ordinal). The x64 exception-directory range and size are checked before target memory allocation.
+
+If initialization fails after the DLL entry point has started, a remote call times out, or image cleanup fails, the image may remain in the target. CompactLoader blocks another Manual Map attempt for that process instance and DLL path during the current application session. Restart the target before retrying; restarting CompactLoader alone does not make the retained image safe. Loaded dependencies may remain referenced after a failed attempt.
+
+This remains an experimental mapper: static TLS/TLS callbacks, delay imports, CFG/XFG load configuration and x86 SafeSEH registration are unsupported. Successful initialization does not guarantee that every DLL feature will work. Unloading manually mapped images is not supported.

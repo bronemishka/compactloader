@@ -57,6 +57,32 @@ internal static class Program
                     {
                         try { Loader.Load(descriptor, tls, method); throw new Exception("TLS image was accepted."); }
                         catch (NotSupportedException ex) when (ex.Message.Contains("TLS")) { Console.WriteLine("Unsupported TLS: rejected."); }
+                        var malformed = Path.Combine(folder, "Malformed.dll");
+                        var failed = Path.Combine(folder, "Failed.dll");
+                        try
+                        {
+                            if (Environment.Is64BitProcess)
+                            {
+                                var bytes = NativeFixture.Build(false);
+                                // Corrupt the x64 exception-directory size in the PE fixture.
+                                BitConverter.GetBytes(13).CopyTo(bytes, 0x98 + 112 + 28);
+                                File.WriteAllBytes(malformed, bytes);
+                                try { _ = new PortableImage(malformed); throw new Exception("Malformed exception table accepted."); }
+                                catch (BadImageFormatException) { Console.WriteLine("Invalid exception table: rejected during preflight."); }
+                            }
+                            var failureBytes = NativeFixture.Build(false);
+                            var changed = false;
+                            for (var i = 0x200; i < 0x3fb; i++)
+                                if (failureBytes[i] == 0xb8 && failureBytes[i + 1] == 1 && failureBytes[i + 2] == 0 && failureBytes[i + 3] == 0 && failureBytes[i + 4] == 0)
+                                { failureBytes[i + 1] = 0; changed = true; break; }
+                            Assert(changed, "Could not prepare DllMain failure fixture.");
+                            File.WriteAllBytes(failed, failureBytes);
+                            try { Loader.Load(descriptor, failed, method); throw new Exception("DllMain failure accepted."); }
+                            catch (InvalidOperationException ex) when (ex.Message.Contains("calling DLL entry point") && ex.Message.Contains("retained")) { }
+                            try { Loader.Load(descriptor, failed, method); throw new Exception("Unsafe retry accepted."); }
+                            catch (InvalidOperationException ex) when (ex.Message.Contains("previous Manual Map attempt")) { Console.WriteLine("Failed initialization: retained image tracked; retry blocked."); }
+                        }
+                        finally { File.Delete(malformed); File.Delete(failed); }
                     }
                     Console.WriteLine("PASS: imported API, relocation, continued target execution, duplicate load.");
                 }
