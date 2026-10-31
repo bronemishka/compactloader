@@ -26,11 +26,18 @@ public partial class MainWindow : Window
     ProcessListItem? selectedProcess;
     ProcessListItem? selectionBeforePicker;
     int logEntries;
+    readonly OutputWindow output;
+    TextBox Log => output.Log;
     bool systemAccentRefreshQueued;
     bool appearanceClosed;
     public MainWindow()
     {
         InitializeComponent();
+        output = new OutputWindow();
+        output.Log.TextChanged += LogTextChanged;
+        output.SaveButton.Click += SaveLogClick;
+        output.CopyButton.Click += CopyLogClick;
+        output.ClearButton.Click += ClearLogClick;
         var version = typeof(MainWindow).Assembly.GetName().Version!;
         AppVersion.Text = $"v{version.Major}.{version.Minor}.{version.Build}";
         InitializeAppearanceControls();
@@ -51,6 +58,8 @@ public partial class MainWindow : Window
         SystemParameters.StaticPropertyChanged += SystemAccentChanged;
         Closed += (_, _) =>
         {
+            output.AllowClose = true;
+            output.Close();
             appearanceClosed = true;
             SystemParameters.StaticPropertyChanged -= SystemAccentChanged;
         };
@@ -108,6 +117,7 @@ public partial class MainWindow : Window
             button.BorderBrush = option.Name == ThemeManager.AccentName ? (Brush)FindResource("Text") : Brushes.Transparent;
         }
         WindowAppearance.Apply(this);
+        WindowAppearance.Apply(output);
     }
     void SystemAccentChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -199,6 +209,19 @@ public partial class MainWindow : Window
     }
     void OpenLibrary(object sender, ExecutedRoutedEventArgs e) { if (!busy) BrowseClick(sender, e); }
     async void RefreshProcesses(object sender, ExecutedRoutedEventArgs e) => await RefreshTargets();
+    void OpenOutputClick(object sender, RoutedEventArgs e) => ShowOutput();
+    void ShowOutput()
+    {
+        if (!output.IsVisible)
+        {
+            var area = SystemParameters.WorkArea;
+            output.Left = Math.Clamp(Left + ActualWidth + 10, area.Left, Math.Max(area.Left, area.Right - output.Width));
+            output.Top = Math.Clamp(Top, area.Top, Math.Max(area.Top, area.Bottom - output.Height));
+            output.Owner = this;
+            output.Show();
+        }
+        output.Activate();
+    }
     void LogTextChanged(object sender, TextChangedEventArgs e)
     {
         if (LogPreview is null) return;
@@ -242,7 +265,7 @@ public partial class MainWindow : Window
             UpdateSelectedProcess();
             Filter(); Status.Text = $"{targets.Count} processes available.";
         }
-        catch (Exception ex) { Write("Process enumeration failed: " + ex.Message); Status.Text = "Process enumeration failed"; OutputExpander.IsExpanded = true; }
+        catch (Exception ex) { Write("Process enumeration failed: " + ex.Message); Status.Text = "Process enumeration failed"; ShowOutput(); }
         finally { refreshing = false; RefreshButton.IsEnabled = true; UpdateAction(); }
     }
     void SearchChanged(object sender, TextChangedEventArgs e) { if (Processes is not null) Filter(); }
@@ -278,7 +301,7 @@ public partial class MainWindow : Window
     void UpdateAction()
     {
         LoadButton.IsEnabled = !busy && !refreshing && selectedProcess is not null && dllPath is not null;
-        ActionHint.Text = busy ? "Working. Check output below." : refreshing ? "Refreshing processes…" :
+        ActionHint.Text = busy ? "Working. Check output." : refreshing ? "Refreshing processes…" :
             selectedProcess is null ? "Select a process to continue." :
             dllPath is null ? "Choose a DLL to continue." : "Ready to load.";
     }
@@ -334,7 +357,7 @@ public partial class MainWindow : Window
             heading = "Load not verified";
             details = ex.Message;
             Status.Text = "Load not verified. See output.";
-            OutputExpander.IsExpanded = true;
+            ShowOutput();
         }
         finally { SetBusy(false); }
         new LoadResultDialog(this, heading, $"{target.Name} · PID {target.Id}\n{System.IO.Path.GetFileName(path)} · {method}\n\n{details}").ShowDialog();
@@ -428,13 +451,13 @@ public partial class MainWindow : Window
         {
             var report = await Task.Run(() => DllInspector.Inspect(path));
             Write("DLL inspection:" + Environment.NewLine + report);
-            OutputExpander.IsExpanded = true;
+            ShowOutput();
             Status.Text = "DLL metadata inspected.";
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or BadImageFormatException)
         {
             Write("DLL inspection failed: " + ex.Message);
-            OutputExpander.IsExpanded = true;
+            ShowOutput();
             Status.Text = "DLL inspection failed.";
         }
         finally { SetBusy(false); }

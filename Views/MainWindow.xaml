@@ -156,17 +156,13 @@
       <TextBlock x:Name="ActionHint" Text="Select a process to continue." VerticalAlignment="Center" Foreground="{DynamicResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,0,10,0"/>
       <Button Grid.Column="1" x:Name="LoadButton" Content="Load DLL" MinWidth="112" Background="{DynamicResource Accent}" Foreground="{DynamicResource OnAccent}" BorderBrush="{DynamicResource AccentOutline}" FontWeight="SemiBold" Padding="16,7" Click="LoadClick" IsEnabled="False"/>
      </Grid>
-     <Expander x:Name="OutputExpander" Style="{StaticResource OutputExpanderStyle}" IsExpanded="False">
-      <Expander.Header><StackPanel Orientation="Horizontal"><TextBlock Text="Output" FontSize="11"/><TextBlock x:Name="LogCount" Text="0" Foreground="{DynamicResource AccentMuted}" FontFamily="{StaticResource UiFont}" FontSize="10" Margin="8,0,0,0" VerticalAlignment="Center"/></StackPanel></Expander.Header>
-      <Grid Height="174" Margin="0,4,0,0"><Grid.RowDefinitions><RowDefinition Height="24"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-       <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><Button Content="Save…" Click="SaveLogClick" Padding="8,3" MinHeight="24" FontSize="10" Margin="0,0,6,0"/><Button Content="Copy" Click="CopyLogClick" Padding="8,3" MinHeight="24" FontSize="10" Margin="0,0,6,0"/><Button Content="Clear" Click="ClearLogClick" Padding="8,3" MinHeight="24" FontSize="10"/></StackPanel>
-       <Border Grid.Row="1" Background="{DynamicResource ConsoleBackground}" BorderBrush="{DynamicResource ConsoleBorder}" BorderThickness="1" CornerRadius="3" Margin="0,6,0,0" Padding="10,8">
-        <Grid><TextBox x:Name="Log" TextChanged="LogTextChanged" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Background="Transparent" BorderThickness="0" Padding="0" FontFamily="{StaticResource UiFont}" FontSize="11" Foreground="{DynamicResource ConsoleText}" AutomationProperties.Name="Session output"/><TextBlock Text="No activity yet." Foreground="{DynamicResource Subtle}" FontFamily="{StaticResource UiFont}" FontSize="11" IsHitTestVisible="False" VerticalAlignment="Top"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Text, ElementName=Log}" Value=""><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock></Grid>
-       </Border>
+     <Button Click="OpenOutputClick" HorizontalContentAlignment="Stretch" Padding="9,5" ToolTip="Open output in a separate window">
+      <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+       <TextBlock Text="Output" FontSize="11"/><TextBlock x:Name="LogCount" Grid.Column="1" Text="0" Foreground="{DynamicResource AccentMuted}" FontSize="10" Margin="8,0,0,0" VerticalAlignment="Center"/>
+       <TextBlock Grid.Column="2" Text="↗" Foreground="{DynamicResource AccentMuted}"/>
       </Grid>
-     </Expander>
+     </Button>
      <Border Background="{DynamicResource ConsoleBackground}" BorderBrush="{DynamicResource ConsoleBorder}" BorderThickness="1" CornerRadius="3" Padding="9,6" Margin="0,6,0,0">
-      <Border.Style><Style TargetType="Border"><Setter Property="Visibility" Value="Visible"/><Style.Triggers><DataTrigger Binding="{Binding IsExpanded, ElementName=OutputExpander}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></Border.Style>
       <TextBlock x:Name="LogPreview" Text="No activity yet." Foreground="{DynamicResource ConsoleText}" FontFamily="{StaticResource UiFont}" FontSize="10" Height="15" LineHeight="15" LineStackingStrategy="BlockLineHeight" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ClipToBounds="True" AutomationProperties.Name="Recent output"/>
      </Border>
     </StackPanel>
