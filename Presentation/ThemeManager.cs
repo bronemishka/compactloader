@@ -35,13 +35,33 @@ internal static class ThemeManager
     internal static string CustomAccentHex { get; private set; } = "#A0CB87";
     static string SettingsPath => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CompactLoader", "appearance.json");
 
-    internal static void Load()
+    internal static async Task Load()
     {
-        var settings = AppearancePreferencesStore.Read(SettingsPath);
+        var path = SettingsPath;
+        var settings = await Task.Run(() => AppearancePreferencesStore.Read(path));
         bool validCustom = TryParseHex(settings.CustomAccent, out var custom);
         CustomAccentHex = validCustom ? Hex(custom) : "#A0CB87";
         var knownAccent = settings.Accent == "Windows" || settings.Accent == "Custom" && validCustom || Accents.Any(a => a.Name == settings.Accent);
         Apply(settings.Light, knownAccent ? settings.Accent : "Windows", false);
+    }
+
+    static readonly System.Threading.SemaphoreSlim saveGate = new(1, 1);
+    internal static Task PendingSave { get; private set; } = Task.CompletedTask;
+
+    internal static Task<bool> Save()
+    {
+        var path = SettingsPath;
+        var snapshot = new AppearancePreferences(IsLight, AccentName) { CustomAccent = CustomAccentHex };
+        var task = SaveSnapshot(path, snapshot);
+        PendingSave = task;
+        return task;
+    }
+
+    static async Task<bool> SaveSnapshot(string path, AppearancePreferences snapshot)
+    {
+        await saveGate.WaitAsync();
+        try { return await Task.Run(() => AppearancePreferencesStore.Write(path, snapshot)); }
+        finally { saveGate.Release(); }
     }
 
     internal static Color Preview(AccentOption option) => (Color)ColorConverter.ConvertFromString(IsLight ? option.Light : option.Dark);

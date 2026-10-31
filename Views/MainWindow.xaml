@@ -3,9 +3,9 @@
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
  xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
  xmlns:local="clr-namespace:CompactLoader"
- Title="Compact Loader" Icon="/CompactLoader;component/Assets/app.ico" Width="480" MinWidth="420" MinHeight="330" SizeToContent="Height"
+ Title="Compact Loader" Icon="/CompactLoader;component/Assets/app.ico" Width="480" Height="360" SizeToContent="Manual"
  Background="{DynamicResource AppBackground}" FontFamily="{StaticResource UiFont}" FontSize="12" UseLayoutRounding="True"
- WindowStyle="None" ResizeMode="CanResize" WindowStartupLocation="CenterScreen" Closing="WindowClosing">
+ WindowStyle="None" ResizeMode="CanMinimize" WindowStartupLocation="CenterScreen" Closing="WindowClosing">
  <Window.CommandBindings>
   <CommandBinding Command="ApplicationCommands.Find" Executed="FocusSearch"/>
   <CommandBinding Command="ApplicationCommands.Open" Executed="OpenLibrary"/>
@@ -17,7 +17,7 @@
   <KeyBinding Key="F5" Command="NavigationCommands.Refresh"/>
  </Window.InputBindings>
  <shell:WindowChrome.WindowChrome>
-  <shell:WindowChrome CaptionHeight="34" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="4" UseAeroCaptionButtons="False"/>
+  <shell:WindowChrome CaptionHeight="34" ResizeBorderThickness="0" GlassFrameThickness="0" CornerRadius="4" UseAeroCaptionButtons="False"/>
  </shell:WindowChrome.WindowChrome>
  <Border x:Name="WindowSurface" Background="{DynamicResource AppBackground}" BorderBrush="{DynamicResource FrameBorder}" BorderThickness="1" CornerRadius="4">
   <Grid>
@@ -58,9 +58,6 @@
        </Border>
       </Popup>
       <Button Style="{StaticResource CaptionButton}" Height="32" Click="MinimizeClick" AutomationProperties.Name="Minimize" ToolTip="Minimize" shell:WindowChrome.IsHitTestVisibleInChrome="True"><Path Data="M 0 5 L 10 5" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1" Width="10" Height="10"/></Button>
-      <Button x:Name="MaximizeButton" Style="{StaticResource CaptionButton}" Height="32" Click="MaximizeClick" AutomationProperties.Name="Maximize or restore" ToolTip="Maximize / Restore" shell:WindowChrome.IsHitTestVisibleInChrome="True">
-       <Path Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1" Width="11" Height="11"><Path.Style><Style TargetType="Path"><Setter Property="Data" Value="M 1 1 L 10 1 L 10 10 L 1 10 Z"/><Style.Triggers><DataTrigger Binding="{Binding WindowState, RelativeSource={RelativeSource AncestorType=Window}}" Value="Maximized"><Setter Property="Data" Value="M 3 3 L 3 1 L 10 1 L 10 8 L 8 8 M 1 3 L 8 3 L 8 10 L 1 10 Z"/></DataTrigger></Style.Triggers></Style></Path.Style></Path>
-      </Button>
       <Button Style="{StaticResource CloseCaptionButton}" Height="32" Click="CloseClick" AutomationProperties.Name="Close" ToolTip="Close" shell:WindowChrome.IsHitTestVisibleInChrome="True"><Path Data="M 1 1 L 10 10 M 1 10 L 10 1" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.2" Width="11" Height="11"/></Button>
      </StackPanel>
     </Grid>
@@ -137,9 +134,13 @@
         <TextBlock x:Name="FileNameLabel" Text="Choose or drop a native DLL…" Foreground="{DynamicResource SecondaryText}" TextTrimming="CharacterEllipsis" FontFamily="{StaticResource UiFont}" FontSize="11" Margin="9,0,28,0" VerticalAlignment="Center" IsHitTestVisible="False"/>
        </Grid>
       </Border>
-      <Button Grid.Column="2" x:Name="BrowseButton" Content="Open…" Click="BrowseClick" Padding="10,6" Margin="6,0,0,0" ToolTip="Choose a native DLL (Ctrl+O)"/>
+      <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="6,0,0,0">
+       <Button x:Name="BrowseButton" Content="Open…" Click="BrowseClick" Padding="10,6" ToolTip="Choose a native DLL (Ctrl+O)"/>
+       <Button x:Name="InspectButton" Width="32" Padding="7" Margin="4,0,0,0" Click="InspectDllClick" AutomationProperties.Name="Inspect DLL" ToolTip="Inspect DLL — read PE metadata without executing the DLL">
+        <Path Data="M 10.5 6 A 4.5 4.5 0 1 1 1.5 6 A 4.5 4.5 0 1 1 10.5 6 M 9.3 9.3 L 14 14" Width="14" Height="14" Stretch="Uniform" Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" StrokeThickness="1.3" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+       </Button>
+      </StackPanel>
      </Grid>
-     <Button Content="Inspect DLL…" HorizontalAlignment="Right" Margin="0,5,0,0" Padding="8,3" MinHeight="24" FontSize="10" Click="InspectDllClick" ToolTip="Read PE metadata without executing the DLL"/>
 
      <Grid Margin="0,10,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="56"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
       <TextBlock Text="Method" Foreground="{DynamicResource Muted}" FontSize="11" VerticalAlignment="Center"/>
@@ -166,7 +167,7 @@
      </Expander>
      <Border Background="{DynamicResource ConsoleBackground}" BorderBrush="{DynamicResource ConsoleBorder}" BorderThickness="1" CornerRadius="3" Padding="9,6" Margin="0,6,0,0">
       <Border.Style><Style TargetType="Border"><Setter Property="Visibility" Value="Visible"/><Style.Triggers><DataTrigger Binding="{Binding IsExpanded, ElementName=OutputExpander}" Value="True"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></Border.Style>
-      <TextBlock x:Name="LogPreview" Text="No activity yet." Foreground="{DynamicResource ConsoleText}" FontFamily="{StaticResource UiFont}" FontSize="10" LineHeight="15" LineStackingStrategy="BlockLineHeight" TextTrimming="CharacterEllipsis" MinHeight="45" AutomationProperties.Name="Recent output"/>
+      <TextBlock x:Name="LogPreview" Text="No activity yet." Foreground="{DynamicResource ConsoleText}" FontFamily="{StaticResource UiFont}" FontSize="10" Height="15" LineHeight="15" LineStackingStrategy="BlockLineHeight" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" ClipToBounds="True" AutomationProperties.Name="Recent output"/>
      </Border>
     </StackPanel>
    </ScrollViewer>

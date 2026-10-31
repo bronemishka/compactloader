@@ -16,6 +16,11 @@ public partial class MainWindow : Window
     readonly string sessionPreferencesPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CompactLoader", "session.json");
     SessionPreferences sessionPreferences = new();
     bool sessionReady;
+    readonly System.Threading.SemaphoreSlim sessionSaveGate = new(1, 1);
+    Task pendingSessionSave = Task.CompletedTask;
+    Task pendingLogSave = Task.CompletedTask;
+    bool closingAfterSave;
+    int fileSelectionVersion;
     bool busy;
     bool refreshing;
     ProcessListItem? selectedProcess;
@@ -27,11 +32,15 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         InitializeAppearanceControls();
-        RestoreSession();
         SelectedIcon.Source = ProcessIconProvider.Get(-1);
-        MaxHeight = Math.Max(MinHeight, SystemParameters.WorkArea.Height - 24);
         Architecture.Text = Environment.Is64BitProcess ? "win / x64" : "win / x86";
-        Loaded += async (_, _) => await RefreshTargets();
+        Loaded += async (_, _) =>
+        {
+            SetBusy(true);
+            try { await RestoreSession(); }
+            finally { SetBusy(false); }
+            if (!appearanceClosed) await RefreshTargets();
+        };
         PreviewMouseDown += DismissPickersOnOutsideClick;
         Deactivated += (_, _) => ClosePickers();
         LocationChanged += (_, _) => ClosePickers();
@@ -43,18 +52,8 @@ public partial class MainWindow : Window
             appearanceClosed = true;
             SystemParameters.StaticPropertyChanged -= SystemAccentChanged;
         };
-        StateChanged += (_, _) =>
-        {
-            WindowSurface.CornerRadius = new CornerRadius(WindowState == WindowState.Maximized ? 0 : 4);
-            WindowSurface.BorderThickness = new Thickness(WindowState == WindowState.Maximized ? 0 : 1);
-        };
     }
     void MinimizeClick(object sender, RoutedEventArgs e) => SystemCommands.MinimizeWindow(this);
-    void MaximizeClick(object sender, RoutedEventArgs e)
-    {
-        if (WindowState == WindowState.Maximized) SystemCommands.RestoreWindow(this);
-        else SystemCommands.MaximizeWindow(this);
-    }
     void CloseClick(object sender, RoutedEventArgs e) => SystemCommands.CloseWindow(this);
     void ClosePickers()
     {
@@ -124,25 +123,28 @@ public partial class MainWindow : Window
         if (ThemeManager.AccentName == "Windows") ThemeManager.Apply(ThemeManager.IsLight, "Windows", false);
         UpdateAppearanceControls();
     }
-    void ToggleThemeClick(object sender, RoutedEventArgs e)
+    async void ToggleThemeClick(object sender, RoutedEventArgs e)
     {
-        var saved = ThemeManager.Apply(!ThemeManager.IsLight, ThemeManager.AccentName);
+        ThemeManager.Apply(!ThemeManager.IsLight, ThemeManager.AccentName, false);
         UpdateAppearanceControls();
+        var saved = await ThemeManager.Save();
         if (!saved) Status.Text = "Theme applied. Could not save preferences.";
     }
-    void AccentClick(object sender, RoutedEventArgs e)
+    async void AccentClick(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: string name }) return;
-        var saved = ThemeManager.Apply(ThemeManager.IsLight, name);
+        ThemeManager.Apply(ThemeManager.IsLight, name, false);
         UpdateAppearanceControls();
         AccentPickerToggle.IsChecked = false;
+        var saved = await ThemeManager.Save();
         if (!saved) Status.Text = "Accent applied. Could not save preferences.";
     }
-    void CustomAccentApply(object sender, RoutedEventArgs e)
+    async void CustomAccentApply(object sender, RoutedEventArgs e)
     {
-        var saved = ThemeManager.ApplyCustom(ThemeManager.Hex(CustomAccentEditor.SelectedColor));
+        ThemeManager.ApplyCustom(ThemeManager.Hex(CustomAccentEditor.SelectedColor), false);
         UpdateAppearanceControls();
         AccentPickerToggle.IsChecked = false;
+        var saved = await ThemeManager.Save();
         if (!saved) Status.Text = "Accent applied. Could not save preferences.";
     }
     void AccentPickerKeyDown(object sender, KeyEventArgs e)
@@ -200,7 +202,7 @@ public partial class MainWindow : Window
         if (LogPreview is null) return;
         var lines = Log.Text.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None).ToList();
         while (lines.Count > 0 && lines[^1].Length == 0) lines.RemoveAt(lines.Count - 1);
-        LogPreview.Text = lines.Count == 0 ? "No activity yet." : string.Join(Environment.NewLine, lines.TakeLast(3));
+        LogPreview.Text = lines.Count == 0 ? "No activity yet." : lines[^1];
     }
     void ClearLogClick(object sender, RoutedEventArgs e) { Log.Clear(); logEntries = 0; LogCount.Text = "0"; }
     void CopyLogClick(object sender, RoutedEventArgs e)
@@ -274,7 +276,7 @@ public partial class MainWindow : Window
     void UpdateAction()
     {
         LoadButton.IsEnabled = !busy && !refreshing && selectedProcess is not null && dllPath is not null;
-        ActionHint.Text = busy ? "Loading. Check output below." : refreshing ? "Refreshing processes…" :
+        ActionHint.Text = busy ? "Working. Check output below." : refreshing ? "Refreshing processes…" :
             selectedProcess is null ? "Select a process to continue." :
             dllPath is null ? "Choose a DLL to continue." : "Ready to load.";
     }
@@ -284,10 +286,13 @@ public partial class MainWindow : Window
         var dialog = new OpenFileDialog { Filter = "Native DLL (*.dll)|*.dll", CheckFileExists = true };
         if (dialog.ShowDialog(this) == true) SelectFile(dialog.FileName);
     }
-    void SelectFile(string path)
+    async void SelectFile(string path)
     {
         if (busy) return;
-        if (!File.Exists(path) || !string.Equals(Path.GetExtension(path), ".dll", StringComparison.OrdinalIgnoreCase)) { Write("Select an existing .dll file."); return; }
+        var version = ++fileSelectionVersion;
+        var exists = await Task.Run(() => File.Exists(path));
+        if (version != fileSelectionVersion || busy || appearanceClosed) return;
+        if (!exists || !string.Equals(Path.GetExtension(path), ".dll", StringComparison.OrdinalIgnoreCase)) { Write("Select an existing .dll file."); return; }
                 dllPath = Path.GetFullPath(path); FileNameLabel.Text = dllPath; UpdateAction();
         sessionPreferences.RecentLibraries.RemoveAll(p => string.Equals(p, dllPath, StringComparison.OrdinalIgnoreCase));
         sessionPreferences.RecentLibraries.Insert(0, dllPath);
@@ -311,40 +316,76 @@ public partial class MainWindow : Window
         if (!Enum.TryParse<LoadMethod>((Method.SelectedItem as ComboBoxItem)?.Tag as string, out var method)) return;
         var progress = new Progress<string>(message => { Write(message); Status.Text = message; });
         var path = dllPath; SetBusy(true); Status.Text = "Loading library…";
-        try { Write($"Loading library → {target.Name}, PID {target.Id} / {method}"); Write(await Task.Run(() => Loader.Load(target, path, method, progress))); Status.Text = method == LoadMethod.ManualMap ? "Image initialization completed" : "Library load verified"; }
-        catch (Exception ex) { Write("Error: " + ex.Message); Status.Text = "Load not verified. See output."; OutputExpander.IsExpanded = true; }
+        string heading;
+        string details;
+        try
+        {
+            Write($"Loading library → {target.Name}, PID {target.Id} / {method}");
+            details = await Task.Run(() => Loader.Load(target, path, method, progress));
+            Write(details);
+            heading = method == LoadMethod.ManualMap ? "Image initialization completed" : "Library load verified";
+            Status.Text = heading;
+        }
+        catch (Exception ex)
+        {
+            Write("Error: " + ex.Message);
+            heading = "Load not verified";
+            details = ex.Message;
+            Status.Text = "Load not verified. See output.";
+            OutputExpander.IsExpanded = true;
+        }
         finally { SetBusy(false); }
+        new LoadResultDialog(this, heading, $"{target.Name} · PID {target.Id}\n{System.IO.Path.GetFileName(path)} · {method}\n\n{details}").ShowDialog();
     }
     void SetBusy(bool value)
     {
         busy = value; Method.IsEnabled = Processes.IsEnabled = Search.IsEnabled = BrowseButton.IsEnabled = RefreshButton.IsEnabled = DropArea.AllowDrop = !value;
         RecentLibraries.IsEnabled = !value; MainWindowsOnly.IsEnabled = !value;
+        InspectButton.IsEnabled = !value;
         ProcessPickerToggle.IsEnabled = !value;
         if (value) ProcessPickerToggle.IsChecked = false;
         LoadButton.Content = value ? "Loading…" : "Load DLL"; UpdateAction();
     }
-    void RestoreSession()
+    async Task RestoreSession()
     {
-        try
+        sessionPreferences = await Task.Run(() =>
         {
-            if (File.Exists(sessionPreferencesPath))
-                sessionPreferences = System.Text.Json.JsonSerializer.Deserialize<SessionPreferences>(File.ReadAllText(sessionPreferencesPath)) ?? new();
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException) { }
+            try
+            {
+                if (File.Exists(sessionPreferencesPath))
+                    return System.Text.Json.JsonSerializer.Deserialize<SessionPreferences>(File.ReadAllText(sessionPreferencesPath)) ?? new();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException) { }
+            return new SessionPreferences();
+        });
         sessionPreferences.RecentLibraries = (sessionPreferences.RecentLibraries ?? new()).Where(p => !string.IsNullOrWhiteSpace(p)).Distinct(StringComparer.OrdinalIgnoreCase).Take(8).ToList();
         MainWindowsOnly.IsChecked = sessionPreferences.MainWindowsOnly;
         UpdateRecentLibraries(); sessionReady = true;
     }
     void SaveSession()
     {
+        var snapshot = new SessionPreferences
+        {
+            MainWindowsOnly = sessionPreferences.MainWindowsOnly,
+            RecentLibraries = sessionPreferences.RecentLibraries.ToList()
+        };
+        pendingSessionSave = SaveSessionSnapshot(snapshot);
+    }
+    async Task SaveSessionSnapshot(SessionPreferences snapshot)
+    {
+        await sessionSaveGate.WaitAsync();
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(sessionPreferencesPath)!);
-            var temporary = sessionPreferencesPath + ".tmp";
-            File.WriteAllText(temporary, System.Text.Json.JsonSerializer.Serialize(sessionPreferences));
-            File.Move(temporary, sessionPreferencesPath, true);
+            await Task.Run(() =>
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(sessionPreferencesPath)!);
+                var temporary = sessionPreferencesPath + ".tmp";
+                File.WriteAllText(temporary, System.Text.Json.JsonSerializer.Serialize(snapshot));
+                File.Move(temporary, sessionPreferencesPath, true);
+            });
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Status.Text = "Could not save session preferences."; }
+        finally { sessionSaveGate.Release(); }
     }
     void UpdateRecentLibraries()
     {
@@ -355,18 +396,22 @@ public partial class MainWindow : Window
         RecentLibraries.SelectedIndex = 0;
         RecentLibraries.Visibility = Visibility.Visible;
     }
-    void RecentLibrarySelected(object sender, SelectionChangedEventArgs e)
+    async void RecentLibrarySelected(object sender, SelectionChangedEventArgs e)
     {
         if (busy || RecentLibraries.SelectedItem is not ComboBoxItem { Tag: string path }) return;
-        if (!File.Exists(path))
+        var version = ++fileSelectionVersion;
+        var exists = await Task.Run(() => File.Exists(path));
+        if (version != fileSelectionVersion || busy || appearanceClosed) return;
+        if (!exists)
         {
             Write("Recent DLL no longer exists: " + path);
             sessionPreferences.RecentLibraries.Remove(path); UpdateRecentLibraries(); SaveSession(); return;
         }
         SelectFile(path);
     }
-    void InspectDllClick(object sender, RoutedEventArgs e)
+    async void InspectDllClick(object sender, RoutedEventArgs e)
     {
+        if (busy || refreshing) return;
         var path = dllPath;
         if (path is null)
         {
@@ -374,9 +419,12 @@ public partial class MainWindow : Window
             if (dialog.ShowDialog(this) != true) return;
             path = dialog.FileName;
         }
+        SetBusy(true);
+        LoadButton.Content = "Inspecting…";
+        Status.Text = "Reading DLL metadata…";
         try
         {
-            var report = DllInspector.Inspect(path);
+            var report = await Task.Run(() => DllInspector.Inspect(path));
             Write("DLL inspection:" + Environment.NewLine + report);
             OutputExpander.IsExpanded = true;
             Status.Text = "DLL metadata inspected.";
@@ -387,18 +435,37 @@ public partial class MainWindow : Window
             OutputExpander.IsExpanded = true;
             Status.Text = "DLL inspection failed.";
         }
+        finally { SetBusy(false); }
     }
-    void SaveLogClick(object sender, RoutedEventArgs e)
+    async void SaveLogClick(object sender, RoutedEventArgs e)
     {
+        if (!pendingLogSave.IsCompleted) { Status.Text = "Saving output…"; return; }
         if (string.IsNullOrEmpty(Log.Text)) { Status.Text = "No output to save."; return; }
         var dialog = new SaveFileDialog { Filter = "Text log (*.txt)|*.txt", FileName = $"CompactLoader-{DateTime.Now:yyyyMMdd-HHmmss}.txt" };
         if (dialog.ShowDialog(this) != true) return;
-        try { File.WriteAllText(dialog.FileName, Log.Text); Status.Text = "Output saved."; }
+        var text = Log.Text;
+        var path = dialog.FileName;
+        Status.Text = "Saving output…";
+        try
+        {
+            pendingLogSave = Task.Run(() => File.WriteAllText(path, text));
+            await pendingLogSave;
+            Status.Text = "Output saved.";
+        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Write("Could not save output: " + ex.Message); }
     }
-    void WindowClosing(object? sender, CancelEventArgs e)
+    async void WindowClosing(object? sender, CancelEventArgs e)
     {
-        if (busy) { e.Cancel = true; Write("Wait for the current operation to complete."); }
+        if (closingAfterSave) return;
+        if (busy) { e.Cancel = true; Write("Wait for the current operation to complete."); return; }
+        if (pendingSessionSave.IsCompleted && ThemeManager.PendingSave.IsCompleted && pendingLogSave.IsCompleted) return;
+        e.Cancel = true;
+        SetBusy(true);
+        IsEnabled = false;
+        try { await Task.WhenAll(pendingSessionSave, ThemeManager.PendingSave, pendingLogSave); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Write("Could not save output: " + ex.Message); }
+        closingAfterSave = true;
+        Close();
     }
 
 }

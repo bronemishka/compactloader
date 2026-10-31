@@ -2,9 +2,11 @@ using System.Windows;
 namespace CompactLoader;
 public partial class App : Application
 {
-    protected override void OnStartup(StartupEventArgs e)
+    protected override async void OnStartup(StartupEventArgs e)
     {
-        ThemeManager.Load();
+        await ThemeManager.Load();
         base.OnStartup(e);
+        MainWindow = new MainWindow();
+        MainWindow.Show();
     }
 }
