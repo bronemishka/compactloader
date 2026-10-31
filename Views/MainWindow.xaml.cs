@@ -349,11 +349,11 @@ public partial class MainWindow : Window
     void UpdateRecentLibraries()
     {
         RecentLibraries.Items.Clear();
-        RecentLibraries.Items.Add(new ComboBoxItem { Content = "Recent DLLs…", IsEnabled = false });
+        RecentLibraries.Items.Add(new ComboBoxItem { Content = sessionPreferences.RecentLibraries.Count == 0 ? "No recent DLLs yet" : "Recent DLLs", IsEnabled = false });
         foreach (var path in sessionPreferences.RecentLibraries)
-            RecentLibraries.Items.Add(new ComboBoxItem { Content = Path.GetFileName(path), ToolTip = path, Tag = path });
+            RecentLibraries.Items.Add(new ComboBoxItem { Content = new TextBlock { Text = Path.GetFileName(path), TextTrimming = TextTrimming.CharacterEllipsis }, ToolTip = path, Tag = path });
         RecentLibraries.SelectedIndex = 0;
-        RecentLibraries.Visibility = sessionPreferences.RecentLibraries.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+        RecentLibraries.Visibility = Visibility.Visible;
     }
     void RecentLibrarySelected(object sender, SelectionChangedEventArgs e)
     {

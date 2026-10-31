@@ -112,13 +112,35 @@
      </Grid>
      <Grid Margin="0,10,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="56"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
       <TextBlock Text="DLL" Foreground="{DynamicResource Muted}" FontSize="11" VerticalAlignment="Center"/>
-      <Border Grid.Column="1" x:Name="DropArea" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource FieldBorder}" BorderThickness="1" CornerRadius="3" Padding="9,9" AllowDrop="True" Drop="FileDrop" DragOver="FileDragOver">
-       <TextBlock x:Name="FileNameLabel" Text="Choose or drop a native DLL…" Foreground="{DynamicResource SecondaryText}" TextTrimming="CharacterEllipsis" FontFamily="{StaticResource UiFont}" FontSize="11" VerticalAlignment="Center" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
+      <Border Grid.Column="1" x:Name="DropArea" Background="{DynamicResource Surface}" BorderBrush="{DynamicResource FieldBorder}" BorderThickness="1" CornerRadius="3" Padding="0" AllowDrop="True" ToolTip="{Binding Text, ElementName=FileNameLabel}" Drop="FileDrop" DragOver="FileDragOver">
+       <Grid>
+        <ComboBox x:Name="RecentLibraries" SelectionChanged="RecentLibrarySelected" AutomationProperties.Name="DLL path and recent libraries" ToolTip="Choose a recent DLL, or drop a DLL here" MaxDropDownHeight="240">
+         <ComboBox.Template><ControlTemplate TargetType="ComboBox">
+          <Grid>
+           <ToggleButton x:Name="HistoryToggle" Focusable="False" IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" ClickMode="Press">
+            <ToggleButton.Template><ControlTemplate TargetType="ToggleButton">
+             <Border x:Name="HistorySurface" Background="Transparent" CornerRadius="3" BorderThickness="1" BorderBrush="Transparent" MinHeight="34">
+              <Path Data="M 0 0 L 4 4 L 8 0" Stroke="{DynamicResource AccentMuted}" StrokeThickness="1.3" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0"/>
+             </Border>
+             <ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="HistorySurface" Property="BorderBrush" Value="{DynamicResource AccentHover}"/></Trigger><Trigger Property="IsChecked" Value="True"><Setter TargetName="HistorySurface" Property="BorderBrush" Value="{DynamicResource AccentOutline}"/></Trigger></ControlTemplate.Triggers>
+            </ControlTemplate></ToggleButton.Template>
+           </ToggleButton>
+           <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
+            <Border Background="{DynamicResource PopupSurface}" BorderBrush="{DynamicResource PickerBorder}" BorderThickness="1" CornerRadius="3" Padding="4" Width="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" MaxHeight="{TemplateBinding MaxDropDownHeight}">
+             <ScrollViewer CanContentScroll="True" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"><ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/></ScrollViewer>
+            </Border>
+           </Popup>
+          </Grid>
+          <ControlTemplate.Triggers><Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter Property="BorderBrush" Value="{DynamicResource AccentOutline}"/></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/></Trigger></ControlTemplate.Triggers>
+         </ControlTemplate></ComboBox.Template>
+        </ComboBox>
+        <TextBlock x:Name="FileNameLabel" Text="Choose or drop a native DLL…" Foreground="{DynamicResource SecondaryText}" TextTrimming="CharacterEllipsis" FontFamily="{StaticResource UiFont}" FontSize="11" Margin="9,0,28,0" VerticalAlignment="Center" IsHitTestVisible="False"/>
+       </Grid>
       </Border>
       <Button Grid.Column="2" x:Name="BrowseButton" Content="Open…" Click="BrowseClick" Padding="10,6" Margin="6,0,0,0" ToolTip="Choose a native DLL (Ctrl+O)"/>
      </Grid>
      <Button Content="Inspect DLL…" HorizontalAlignment="Right" Margin="0,5,0,0" Padding="8,3" MinHeight="24" FontSize="10" Click="InspectDllClick" ToolTip="Read PE metadata without executing the DLL"/>
-     <ComboBox x:Name="RecentLibraries" Margin="56,6,0,0" SelectionChanged="RecentLibrarySelected" ToolTip="Recently selected DLLs" AutomationProperties.Name="Recent DLLs"/>
+
      <Grid Margin="0,10,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="56"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
       <TextBlock Text="Method" Foreground="{DynamicResource Muted}" FontSize="11" VerticalAlignment="Center"/>
        <ComboBox Grid.Column="1" x:Name="Method" SelectedIndex="0" SelectionChanged="MethodChanged" FontFamily="{StaticResource UiFont}" FontSize="11" AutomationProperties.Name="Library load method">
