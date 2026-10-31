@@ -117,6 +117,8 @@
       </Border>
       <Button Grid.Column="2" x:Name="BrowseButton" Content="Open…" Click="BrowseClick" Padding="10,6" Margin="6,0,0,0" ToolTip="Choose a native DLL (Ctrl+O)"/>
      </Grid>
+     <Button Content="Inspect DLL…" HorizontalAlignment="Right" Margin="0,5,0,0" Padding="8,3" MinHeight="24" FontSize="10" Click="InspectDllClick" ToolTip="Read PE metadata without executing the DLL"/>
+     <ComboBox x:Name="RecentLibraries" Margin="56,6,0,0" SelectionChanged="RecentLibrarySelected" ToolTip="Recently selected DLLs" AutomationProperties.Name="Recent DLLs"/>
      <Grid Margin="0,10,0,0"><Grid.ColumnDefinitions><ColumnDefinition Width="56"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
       <TextBlock Text="Method" Foreground="{DynamicResource Muted}" FontSize="11" VerticalAlignment="Center"/>
        <ComboBox Grid.Column="1" x:Name="Method" SelectedIndex="0" SelectionChanged="MethodChanged" FontFamily="{StaticResource UiFont}" FontSize="11" AutomationProperties.Name="Library load method">
@@ -131,7 +133,7 @@
      <Expander x:Name="OutputExpander" Style="{StaticResource OutputExpanderStyle}" IsExpanded="False">
       <Expander.Header><StackPanel Orientation="Horizontal"><TextBlock Text="Output" FontSize="11"/><TextBlock x:Name="LogCount" Text="0" Foreground="{DynamicResource AccentMuted}" FontFamily="{StaticResource UiFont}" FontSize="10" Margin="8,0,0,0" VerticalAlignment="Center"/></StackPanel></Expander.Header>
       <Grid Height="174" Margin="0,4,0,0"><Grid.RowDefinitions><RowDefinition Height="24"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-       <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><Button Content="Copy" Click="CopyLogClick" Padding="8,3" MinHeight="24" FontSize="10" Margin="0,0,6,0"/><Button Content="Clear" Click="ClearLogClick" Padding="8,3" MinHeight="24" FontSize="10"/></StackPanel>
+       <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><Button Content="Save…" Click="SaveLogClick" Padding="8,3" MinHeight="24" FontSize="10" Margin="0,0,6,0"/><Button Content="Copy" Click="CopyLogClick" Padding="8,3" MinHeight="24" FontSize="10" Margin="0,0,6,0"/><Button Content="Clear" Click="ClearLogClick" Padding="8,3" MinHeight="24" FontSize="10"/></StackPanel>
        <Border Grid.Row="1" Background="{DynamicResource ConsoleBackground}" BorderBrush="{DynamicResource ConsoleBorder}" BorderThickness="1" CornerRadius="3" Margin="0,6,0,0" Padding="10,8">
         <Grid><TextBox x:Name="Log" TextChanged="LogTextChanged" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Background="Transparent" BorderThickness="0" Padding="0" FontFamily="{StaticResource UiFont}" FontSize="11" Foreground="{DynamicResource ConsoleText}" AutomationProperties.Name="Session output"/><TextBlock Text="No activity yet." Foreground="{DynamicResource Subtle}" FontFamily="{StaticResource UiFont}" FontSize="11" IsHitTestVisible="False" VerticalAlignment="Top"><TextBlock.Style><Style TargetType="TextBlock"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers><DataTrigger Binding="{Binding Text, ElementName=Log}" Value=""><Setter Property="Visibility" Value="Visible"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock></Grid>
        </Border>

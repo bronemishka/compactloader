@@ -13,6 +13,9 @@ public partial class MainWindow : Window
 {
     List<ProcessListItem> targets = new();
     string? dllPath;
+    readonly string sessionPreferencesPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CompactLoader", "session.json");
+    SessionPreferences sessionPreferences = new();
+    bool sessionReady;
     bool busy;
     bool refreshing;
     ProcessListItem? selectedProcess;
@@ -24,6 +27,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         InitializeAppearanceControls();
+        RestoreSession();
         SelectedIcon.Source = ProcessIconProvider.Get(-1);
         MaxHeight = Math.Max(MinHeight, SystemParameters.WorkArea.Height - 24);
         Architecture.Text = Environment.Is64BitProcess ? "win / x64" : "win / x86";
@@ -238,7 +242,11 @@ public partial class MainWindow : Window
         finally { refreshing = false; RefreshButton.IsEnabled = true; UpdateAction(); }
     }
     void SearchChanged(object sender, TextChangedEventArgs e) { if (Processes is not null) Filter(); }
-    void WindowFilterChanged(object sender, RoutedEventArgs e) { if (Processes is not null) Filter(); }
+    void WindowFilterChanged(object sender, RoutedEventArgs e)
+    {
+        if (Processes is not null) Filter();
+        if (sessionReady) { sessionPreferences.MainWindowsOnly = MainWindowsOnly.IsChecked == true; SaveSession(); }
+    }
     void Filter()
     {
         var selectedId = selectedProcess?.Id;
@@ -280,7 +288,11 @@ public partial class MainWindow : Window
     {
         if (busy) return;
         if (!File.Exists(path) || !string.Equals(Path.GetExtension(path), ".dll", StringComparison.OrdinalIgnoreCase)) { Write("Select an existing .dll file."); return; }
-        dllPath = Path.GetFullPath(path); FileNameLabel.Text = dllPath; UpdateAction();
+                dllPath = Path.GetFullPath(path); FileNameLabel.Text = dllPath; UpdateAction();
+        sessionPreferences.RecentLibraries.RemoveAll(p => string.Equals(p, dllPath, StringComparison.OrdinalIgnoreCase));
+        sessionPreferences.RecentLibraries.Insert(0, dllPath);
+        sessionPreferences.RecentLibraries = sessionPreferences.RecentLibraries.Take(8).ToList();
+        UpdateRecentLibraries(); SaveSession();
     }
     void FileDragOver(object sender, DragEventArgs e)
     {
@@ -305,9 +317,83 @@ public partial class MainWindow : Window
     void SetBusy(bool value)
     {
         busy = value; Method.IsEnabled = Processes.IsEnabled = Search.IsEnabled = BrowseButton.IsEnabled = RefreshButton.IsEnabled = DropArea.AllowDrop = !value;
+        RecentLibraries.IsEnabled = !value; MainWindowsOnly.IsEnabled = !value;
         ProcessPickerToggle.IsEnabled = !value;
         if (value) ProcessPickerToggle.IsChecked = false;
         LoadButton.Content = value ? "Loading…" : "Load DLL"; UpdateAction();
+    }
+    void RestoreSession()
+    {
+        try
+        {
+            if (File.Exists(sessionPreferencesPath))
+                sessionPreferences = System.Text.Json.JsonSerializer.Deserialize<SessionPreferences>(File.ReadAllText(sessionPreferencesPath)) ?? new();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException) { }
+        sessionPreferences.RecentLibraries = (sessionPreferences.RecentLibraries ?? new()).Where(p => !string.IsNullOrWhiteSpace(p)).Distinct(StringComparer.OrdinalIgnoreCase).Take(8).ToList();
+        MainWindowsOnly.IsChecked = sessionPreferences.MainWindowsOnly;
+        UpdateRecentLibraries(); sessionReady = true;
+    }
+    void SaveSession()
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(sessionPreferencesPath)!);
+            var temporary = sessionPreferencesPath + ".tmp";
+            File.WriteAllText(temporary, System.Text.Json.JsonSerializer.Serialize(sessionPreferences));
+            File.Move(temporary, sessionPreferencesPath, true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Status.Text = "Could not save session preferences."; }
+    }
+    void UpdateRecentLibraries()
+    {
+        RecentLibraries.Items.Clear();
+        RecentLibraries.Items.Add(new ComboBoxItem { Content = "Recent DLLs…", IsEnabled = false });
+        foreach (var path in sessionPreferences.RecentLibraries)
+            RecentLibraries.Items.Add(new ComboBoxItem { Content = Path.GetFileName(path), ToolTip = path, Tag = path });
+        RecentLibraries.SelectedIndex = 0;
+        RecentLibraries.Visibility = sessionPreferences.RecentLibraries.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+    }
+    void RecentLibrarySelected(object sender, SelectionChangedEventArgs e)
+    {
+        if (busy || RecentLibraries.SelectedItem is not ComboBoxItem { Tag: string path }) return;
+        if (!File.Exists(path))
+        {
+            Write("Recent DLL no longer exists: " + path);
+            sessionPreferences.RecentLibraries.Remove(path); UpdateRecentLibraries(); SaveSession(); return;
+        }
+        SelectFile(path);
+    }
+    void InspectDllClick(object sender, RoutedEventArgs e)
+    {
+        var path = dllPath;
+        if (path is null)
+        {
+            var dialog = new OpenFileDialog { Filter = "DLL (*.dll)|*.dll", CheckFileExists = true };
+            if (dialog.ShowDialog(this) != true) return;
+            path = dialog.FileName;
+        }
+        try
+        {
+            var report = DllInspector.Inspect(path);
+            Write("DLL inspection:" + Environment.NewLine + report);
+            OutputExpander.IsExpanded = true;
+            Status.Text = "DLL metadata inspected.";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or BadImageFormatException)
+        {
+            Write("DLL inspection failed: " + ex.Message);
+            OutputExpander.IsExpanded = true;
+            Status.Text = "DLL inspection failed.";
+        }
+    }
+    void SaveLogClick(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrEmpty(Log.Text)) { Status.Text = "No output to save."; return; }
+        var dialog = new SaveFileDialog { Filter = "Text log (*.txt)|*.txt", FileName = $"CompactLoader-{DateTime.Now:yyyyMMdd-HHmmss}.txt" };
+        if (dialog.ShowDialog(this) != true) return;
+        try { File.WriteAllText(dialog.FileName, Log.Text); Status.Text = "Output saved."; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Write("Could not save output: " + ex.Message); }
     }
     void WindowClosing(object? sender, CancelEventArgs e)
     {
