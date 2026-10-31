@@ -64,6 +64,54 @@ internal sealed class PortableImage
             if (!Is64 && config.Size >= 72 && U32(config.RelativeVirtualAddress + 68) != 0)
                 throw new NotSupportedException("Manual Map does not register x86 SafeSEH tables.");
         }
+        ValidateImports();
+        // Validate even when allocation at the preferred base would skip relocation.
+        VisitRelocations(null);
+    }
+
+    void ValidateImports()
+    {
+        var directory = Header.ImportTableDirectory;
+        if (directory.Size == 0 && directory.RelativeVirtualAddress == 0) return;
+        Range(directory.RelativeVirtualAddress, directory.Size);
+        if (directory.RelativeVirtualAddress == 0 || directory.Size < 20)
+            throw new BadImageFormatException("Invalid PE import directory.");
+        var end = checked(directory.RelativeVirtualAddress + directory.Size);
+        for (var descriptor = directory.RelativeVirtualAddress; descriptor <= end - 20; descriptor += 20)
+        {
+            var lookup = U32(descriptor);
+            var name = U32(descriptor + 12);
+            var iat = U32(descriptor + 16);
+            if (lookup == 0 && name == 0 && iat == 0 && U32(descriptor + 4) == 0 && U32(descriptor + 8) == 0) return;
+            if (name == 0 || iat == 0)
+                throw new BadImageFormatException("Invalid PE import descriptor.");
+            _ = Name(checked((int)name));
+            var source = checked((int)(lookup == 0 ? iat : lookup));
+            var destination = checked((int)iat);
+            var width = Is64 ? 8 : 4;
+            if (source % width != 0 || destination % width != 0)
+                throw new BadImageFormatException("Unaligned PE import thunk table.");
+            for (var index = 0; ; index = checked(index + width))
+            {
+                var entry = Pointer(checked(source + index));
+                Range(checked(destination + index), width);
+                if (entry == 0) break;
+                var ordinalFlag = Is64 ? 0x8000000000000000ul : 0x80000000ul;
+                if ((entry & ordinalFlag) != 0)
+                {
+                    if ((entry & ~(ordinalFlag | 0xfffful)) != 0)
+                        throw new BadImageFormatException("Invalid PE ordinal import.");
+                }
+                else
+                {
+                    if (entry > int.MaxValue - 2)
+                        throw new BadImageFormatException("Invalid PE import name RVA.");
+                    Range((int)entry, 2);
+                    _ = Name((int)entry + 2);
+                }
+            }
+        }
+        throw new BadImageFormatException("PE import descriptors have no terminator.");
     }
 
     internal void Range(int offset, int count)
@@ -97,7 +145,16 @@ internal sealed class PortableImage
         if (delta == 0) return;
         var directory = Header.BaseRelocationTableDirectory;
         if (directory.Size == 0) throw new NotSupportedException("The image has no base relocations and its preferred base is unavailable.");
+        VisitRelocations(rva => SetPointer(rva, unchecked(Pointer(rva) + delta)));
+    }
+
+    void VisitRelocations(Action<int>? apply)
+    {
+        var directory = Header.BaseRelocationTableDirectory;
+        if (directory.Size == 0 && directory.RelativeVirtualAddress == 0) return;
         Range(directory.RelativeVirtualAddress, directory.Size);
+        if (directory.RelativeVirtualAddress == 0 || directory.Size < 8)
+            throw new BadImageFormatException("Invalid PE relocation directory.");
         var end = checked(directory.RelativeVirtualAddress + directory.Size);
         for (var cursor = directory.RelativeVirtualAddress; cursor < end;)
         {
@@ -112,7 +169,8 @@ internal sealed class PortableImage
                 if (type == 0) continue;
                 if (type != (Is64 ? 10 : 3)) throw new NotSupportedException("Unsupported PE relocation type: " + type);
                 var rva = checked((int)((long)page + (encoded & 0xfff)));
-                SetPointer(rva, unchecked(Pointer(rva) + delta));
+                Range(rva, Is64 ? 8 : 4);
+                apply?.Invoke(rva);
             }
             cursor = checked(cursor + (int)size);
         }

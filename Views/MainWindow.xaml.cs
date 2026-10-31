@@ -242,6 +242,7 @@ public partial class MainWindow : Window
         MethodHint.Text = ((Method.SelectedItem as ComboBoxItem)?.Tag as string) switch
         {
             "LdrLoadDll" => "Native Windows loader through a small stub.",
+            "LdrpLoader" => "Experimental. x64 build 26300; verified ntdll only.",
             "ThreadHijacking" => "Uses an existing thread; temporarily changes its context.",
             "ManualMap" => "Experimental. No TLS, delay imports or unload.",
             _ => "Standard Windows loader."

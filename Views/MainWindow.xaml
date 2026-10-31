@@ -147,6 +147,7 @@
        <ComboBox Grid.Column="1" x:Name="Method" SelectedIndex="0" SelectionChanged="MethodChanged" FontFamily="{StaticResource UiFont}" FontSize="11" AutomationProperties.Name="Library load method">
         <ComboBoxItem Content="LoadLibraryW" Tag="LoadLibraryW" ContentTemplate="{StaticResource InjectionMethodLabel}" ToolTip="Standard Windows loader. Start here for ordinary native DLLs."/>
         <ComboBoxItem Content="LdrLoadDll" Tag="LdrLoadDll" ContentTemplate="{StaticResource InjectionMethodLabel}" ToolTip="Native Windows loader, called through a small stub."/>
+        <ComboBoxItem Content="LdrpLoader" Tag="LdrpLoader" ContentTemplate="{StaticResource InjectionMethodLabel}" ToolTip="Experimental private loader. Only the verified ntdll binary on x64 build 26300 is supported."/>
         <ComboBoxItem Content="Thread Hijacking" Tag="ThreadHijacking" ContentTemplate="{StaticResource InjectionMethodLabel}" ToolTip="Uses an existing target thread. Advanced method; changes the thread context temporarily."/>
         <ComboBoxItem Content="Manual Map" Tag="ManualMap" ContentTemplate="{StaticResource InjectionMethodLabel}" ToolTip="Experimental PE mapping. TLS, delay imports and unloading are unsupported."/>
        </ComboBox>

@@ -36,6 +36,7 @@ internal static class Loader
         if (FindModule(process, path) != 0) return "DLL is already loaded in the target process. Duplicate load skipped.";
         if (method == LoadMethod.ThreadHijacking) return ThreadHijackMethod.Load(process, handle, path);
         if (method == LoadMethod.ManualMap) return ManualMapMethod.Load(process, handle, path, progress);
+        if (method == LoadMethod.LdrpLoader) return LdrpLoaderMethod.Load(process, handle, path);
         if (method == LoadMethod.LdrLoadDll)
         {
             NativeLoaderStub.Load(process, handle, path);
