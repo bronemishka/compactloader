@@ -31,6 +31,8 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        var version = typeof(MainWindow).Assembly.GetName().Version!;
+        AppVersion.Text = $"v{version.Major}.{version.Minor}.{version.Build}";
         InitializeAppearanceControls();
         SelectedIcon.Source = ProcessIconProvider.Get(-1);
         Architecture.Text = Environment.Is64BitProcess ? "win / x64" : "win / x86";

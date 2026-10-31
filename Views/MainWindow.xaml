@@ -175,7 +175,10 @@
     <Grid>
      <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
      <TextBlock x:Name="Status" Text="Ready" Foreground="{DynamicResource Muted}" FontFamily="{StaticResource UiFont}" FontSize="10" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Margin="0,0,10,0"/>
-     <TextBlock Grid.Column="1" Text="© derevenka-tech" Foreground="{DynamicResource Subtle}" FontFamily="{StaticResource UiFont}" FontSize="9" VerticalAlignment="Center" Margin="0,0,14,0"/>
+     <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,14,0">
+      <TextBlock x:Name="AppVersion" Foreground="{DynamicResource Muted}" FontSize="9" Margin="0,0,10,0" ToolTip="Application version"/>
+      <TextBlock Text="© derevenka-tech" Foreground="{DynamicResource Subtle}" FontSize="9"/>
+     </StackPanel>
      <TextBlock Grid.Column="2" Text="Ctrl+F · F5 · Ctrl+O" Foreground="{DynamicResource Subtle}" FontFamily="{StaticResource UiFont}" FontSize="9" VerticalAlignment="Center"/>
     </Grid>
    </Border>

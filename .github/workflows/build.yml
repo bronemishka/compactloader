@@ -1,0 +1,86 @@
+name: Build, test and release
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Validate and publish (${{ matrix.arch }})
+    runs-on: windows-2025
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, x86]
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
+          architecture: ${{ matrix.arch }}
+      - name: Verify release version
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          [xml]$project = Get-Content CompactLoader.csproj
+          $version = $project.Project.PropertyGroup.Version | Where-Object { $_ }
+          if ($env:RELEASE_TAG -cne "v$version") {
+            throw "Tag $env:RELEASE_TAG does not match project version $version"
+          }
+      - name: Build validation runner
+        run: dotnet build Tests/Validation/Validation.csproj -c Release -r win-${{ matrix.arch }} -p:Platform=${{ matrix.arch }} --self-contained false
+      - name: Run native integration tests
+        run: dotnet Tests/Validation/bin/${{ matrix.arch }}/Release/net10.0-windows/win-${{ matrix.arch }}/Validation.dll
+      - name: Publish single-file executable
+        run: dotnet publish CompactLoader.csproj -c Release -r win-${{ matrix.arch }} -p:Platform=${{ matrix.arch }} --self-contained false -p:IncludeNativeLibrariesForSelfExtract=true -o publish/${{ matrix.arch }}
+      - name: Prepare executable
+        run: |
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          Copy-Item publish/${{ matrix.arch }}/CompactLoader.exe dist/CompactLoader-win-${{ matrix.arch }}.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CompactLoader-win-${{ matrix.arch }}
+          path: dist/*.exe
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: CompactLoader-win-*
+          path: dist
+          merge-multiple: true
+      - name: Create checksums
+        working-directory: dist
+        run: sha256sum *.exe > SHA256SUMS.txt
+      - name: Create release with tested executables
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          notes=".github/release-notes/$RELEASE_TAG.md"
+          if [ -f "$notes" ]; then
+            gh release create "$RELEASE_TAG" dist/* --verify-tag --title "Compact Loader $RELEASE_TAG" --notes-file "$notes"
+          else
+            gh release create "$RELEASE_TAG" dist/* --verify-tag --title "Compact Loader $RELEASE_TAG" --generate-notes
+          fi
