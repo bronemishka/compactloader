@@ -33,6 +33,9 @@ public partial class MainWindow : Window
     TextBox Log => output.Log;
     bool systemAccentRefreshQueued;
     bool appearanceClosed;
+    readonly CancellationTokenSource updateCancellation = new();
+    AvailableUpdate? availableUpdate;
+    bool installingUpdate;
     public MainWindow()
     {
         InitializeComponent();
@@ -55,6 +58,7 @@ public partial class MainWindow : Window
         Architecture.Text = Environment.Is64BitProcess ? "win / x64" : "win / x86";
         Loaded += async (_, _) =>
         {
+            _ = CheckForUpdates();
             SetBusy(true);
             try { await RestoreSession(); }
             finally { SetBusy(false); }
@@ -72,10 +76,59 @@ public partial class MainWindow : Window
             output.AllowClose = true;
             output.Close();
             appearanceClosed = true;
+            updateCancellation.Cancel();
             SystemParameters.StaticPropertyChanged -= SystemAccentChanged;
         };
     }
     void MinimizeClick(object sender, RoutedEventArgs e) => SystemCommands.MinimizeWindow(this);
+    async Task CheckForUpdates()
+    {
+        try
+        {
+            availableUpdate = await UpdateService.Check(updateCancellation.Token);
+            if (appearanceClosed || availableUpdate is null) return;
+            UpdateButton.ToolTip = $"Install v{availableUpdate.Version} and restart";
+            UpdateButton.Visibility = Visibility.Visible;
+            Write($"Update v{availableUpdate.Version} is available. Use the download button beside the theme switch.");
+        }
+        catch (Exception ex)
+        {
+            if (!appearanceClosed) Write("Update check failed: " + ex.Message);
+        }
+    }
+    async void UpdateClick(object sender, RoutedEventArgs e)
+    {
+        if (busy || installingUpdate || availableUpdate is null) return;
+        installingUpdate = true;
+        SetBusy(true);
+        string? staged = null;
+        try
+        {
+            Status.Text = "Downloading update…";
+            LoadButton.Content = "Updating…";
+            staged = await Task.Run(() => UpdateService.Prepare(availableUpdate, updateCancellation.Token));
+            await Task.WhenAll(pendingSessionSave, ThemeManager.PendingSave, pendingLogSave);
+            UpdateService.InstallOnExit(staged);
+            staged = null;
+            closingAfterSave = true;
+            Close();
+        }
+        catch (Exception ex)
+        {
+            Write("Update failed: " + ex.Message);
+            Status.Text = "Update failed. See Output; click the update button to retry.";
+        }
+        finally
+        {
+            if (staged is not null)
+            {
+                try { await Task.Run(() => File.Delete(staged)); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { Write("Could not remove update: " + ex.Message); }
+            }
+            installingUpdate = false;
+            SetBusy(false);
+        }
+    }
     void CloseClick(object sender, RoutedEventArgs e) => SystemCommands.CloseWindow(this);
     void ClosePickers()
     {
@@ -413,6 +466,7 @@ public partial class MainWindow : Window
     }
     void SetBusy(bool value)
     {
+        UpdateButton.IsEnabled = !value;
         busy = value; Method.IsEnabled = Processes.IsEnabled = Search.IsEnabled = BrowseButton.IsEnabled = RefreshButton.IsEnabled = DropArea.AllowDrop = !value;
         RecentLibraries.IsEnabled = !value; MainWindowsOnly.IsEnabled = AutoRefreshProcesses.IsEnabled = !value;
         InspectButton.IsEnabled = !value;

@@ -43,6 +43,8 @@ jobs:
         run: dotnet build Tests/Validation/Validation.csproj -c Release -r win-${{ matrix.arch }} -p:Platform=${{ matrix.arch }} --self-contained false
       - name: Run native integration tests
         run: dotnet Tests/Validation/bin/${{ matrix.arch }}/Release/net10.0-windows/win-${{ matrix.arch }}/Validation.dll
+      - name: Test release update detection
+        run: dotnet run --project Tests/Updates/Updates.csproj -c Release
       - name: Publish single-file executable
         run: dotnet publish CompactLoader.csproj -c Release -r win-${{ matrix.arch }} -p:Platform=${{ matrix.arch }} --self-contained false -p:IncludeNativeLibrariesForSelfExtract=true -o publish/${{ matrix.arch }}
       - name: Prepare executable
