@@ -211,6 +211,26 @@
     </ControlTemplate.Triggers>
    </ControlTemplate></Setter.Value></Setter>
   </Style>
+  <Style x:Key="PickerComboBox" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+   <Setter Property="Height" Value="44"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBox">
+    <Grid>
+     <ToggleButton x:Name="Toggle" Style="{StaticResource ProcessPickerButton}" Focusable="False" IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" ClickMode="Press">
+      <Grid><Path Data="M 0 0 L 4 4 L 8 0" Stroke="{DynamicResource AccentMuted}" StrokeThickness="1.2" HorizontalAlignment="Right" VerticalAlignment="Center"/></Grid>
+     </ToggleButton>
+     <ContentPresenter Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}" Margin="11,0,31,0" VerticalAlignment="Center" IsHitTestVisible="False"/>
+     <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
+      <Border Background="{DynamicResource Surface}" BorderBrush="{DynamicResource PickerBorder}" BorderThickness="1" CornerRadius="3" Padding="4" Margin="0,4,0,0" Width="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}" MaxHeight="{TemplateBinding MaxDropDownHeight}">
+       <ScrollViewer CanContentScroll="True" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"><ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/></ScrollViewer>
+      </Border>
+     </Popup>
+    </Grid>
+    <ControlTemplate.Triggers>
+     <Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="Toggle" Property="BorderBrush" Value="{DynamicResource AccentOutline}"/></Trigger>
+     <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.45"/></Trigger>
+    </ControlTemplate.Triggers>
+   </ControlTemplate></Setter.Value></Setter>
+  </Style>
   <Style TargetType="TextBox">
    <Setter Property="FontFamily" Value="{StaticResource UiFont}"/>
    <Setter Property="Background" Value="{DynamicResource AppBackground}"/><Setter Property="Foreground" Value="{DynamicResource Text}"/>
@@ -257,15 +277,22 @@
    </ControlTemplate></Setter.Value></Setter>
   </Style>
   <DataTemplate x:Key="InjectionMethodLabel">
-   <Grid MinWidth="236" Height="18">
-    <Grid.ColumnDefinitions><ColumnDefinition Width="24"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-    <Path x:Name="Icon" Width="14" Height="14" Stretch="Uniform" Stroke="{DynamicResource AccentInk}" StrokeThickness="1.4" StrokeLineJoin="Round" VerticalAlignment="Center" HorizontalAlignment="Left" Data="M 2 1 L 10 1 L 13 4 L 13 15 L 2 15 Z M 9 1 L 9 5 L 13 5 M 5 8 L 10 8 M 5 11 L 10 11"/>
-    <TextBlock Grid.Column="1" Text="{Binding}" FontSize="11" VerticalAlignment="Center" Margin="0,0,10,0"/>
+   <Grid Height="32">
+    <Grid.ColumnDefinitions><ColumnDefinition Width="26"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+    <Path x:Name="Icon" Width="18" Height="18" Stretch="Uniform" Stroke="{DynamicResource AccentInk}" StrokeThickness="1.4" StrokeLineJoin="Round" VerticalAlignment="Center" HorizontalAlignment="Left" Data="M 2 1 L 10 1 L 13 4 L 13 15 L 2 15 Z M 9 1 L 9 5 L 13 5 M 5 8 L 10 8 M 5 11 L 10 11"/>
+    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,8,0">
+     <TextBlock Text="{Binding}" FontSize="12" TextTrimming="CharacterEllipsis"/>
+     <TextBlock x:Name="Description" Text="Standard Windows loader" FontSize="10" Foreground="{DynamicResource Muted}" Margin="0,3,0,0" TextTrimming="CharacterEllipsis"/>
+    </StackPanel>
     <Border Grid.Column="2" Background="{DynamicResource HoverBackground}" CornerRadius="3" Padding="5,1" VerticalAlignment="Center">
      <TextBlock x:Name="Badge" Text="STANDARD" FontSize="8" FontWeight="SemiBold" Foreground="{DynamicResource AccentInk}"/>
     </Border>
    </Grid>
    <DataTemplate.Triggers>
+    <DataTrigger Binding="{Binding}" Value="LdrLoadDll"><Setter TargetName="Description" Property="Text" Value="Native loader through a stub"/></DataTrigger>
+    <DataTrigger Binding="{Binding}" Value="LdrpLoader"><Setter TargetName="Description" Property="Text" Value="x64 build 26300 · verified ntdll only"/></DataTrigger>
+    <DataTrigger Binding="{Binding}" Value="Thread Hijacking"><Setter TargetName="Description" Property="Text" Value="Uses an existing target thread"/></DataTrigger>
+    <DataTrigger Binding="{Binding}" Value="Manual Map"><Setter TargetName="Description" Property="Text" Value="No TLS, delay imports or unload"/></DataTrigger>
     <DataTrigger Binding="{Binding}" Value="LdrpLoader"><Setter TargetName="Icon" Property="Stroke" Value="{DynamicResource MethodExperimental}"/><Setter TargetName="Badge" Property="Text" Value="EXPERIMENTAL"/><Setter TargetName="Badge" Property="Foreground" Value="{DynamicResource MethodExperimental}"/></DataTrigger>
     <DataTrigger Binding="{Binding}" Value="LdrLoadDll"><Setter TargetName="Icon" Property="Data" Value="M 7 1 L 13 4 L 7 7 L 1 4 Z M 1 8 L 7 11 L 13 8 M 1 12 L 7 15 L 13 12"/><Setter TargetName="Icon" Property="Stroke" Value="{DynamicResource MethodNative}"/><Setter TargetName="Badge" Property="Text" Value="NATIVE"/><Setter TargetName="Badge" Property="Foreground" Value="{DynamicResource MethodNative}"/></DataTrigger>
     <DataTrigger Binding="{Binding}" Value="Thread Hijacking"><Setter TargetName="Icon" Property="Data" Value="M 3 1 L 3 15 M 11 1 L 11 5 C 11 9 3 6 3 11 M 1 13 L 3 15 L 5 13 M 9 3 L 11 1 L 13 3"/><Setter TargetName="Icon" Property="Stroke" Value="{DynamicResource MethodAdvanced}"/><Setter TargetName="Badge" Property="Text" Value="ADVANCED"/><Setter TargetName="Badge" Property="Foreground" Value="{DynamicResource MethodAdvanced}"/></DataTrigger>

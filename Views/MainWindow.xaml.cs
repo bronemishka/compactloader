@@ -12,6 +12,8 @@ namespace CompactLoader;
 public partial class MainWindow : Window
 {
     List<ProcessListItem> targets = new();
+    readonly System.Collections.ObjectModel.ObservableCollection<ProcessListItem> shownTargets = new();
+    readonly System.Windows.Threading.DispatcherTimer processRefreshTimer = new() { Interval = TimeSpan.FromSeconds(3) };
     string? dllPath;
     readonly string sessionPreferencesPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CompactLoader", "session.json");
     SessionPreferences sessionPreferences = new();
@@ -23,6 +25,7 @@ public partial class MainWindow : Window
     int fileSelectionVersion;
     bool busy;
     bool refreshing;
+    bool enumeratingProcesses;
     ProcessListItem? selectedProcess;
     ProcessListItem? selectionBeforePicker;
     int logEntries;
@@ -33,6 +36,13 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        Processes.ItemsSource = shownTargets;
+        processRefreshTimer.Tick += async (_, _) =>
+        {
+            if (sessionReady && AutoRefreshProcesses.IsChecked == true && ProcessPicker.IsOpen && !appearanceClosed)
+                await RefreshTargets(automatic: true);
+        };
+        processRefreshTimer.Start();
         output = new OutputWindow();
         output.Log.TextChanged += LogTextChanged;
         output.SaveButton.Click += SaveLogClick;
@@ -58,6 +68,7 @@ public partial class MainWindow : Window
         SystemParameters.StaticPropertyChanged += SystemAccentChanged;
         Closed += (_, _) =>
         {
+            processRefreshTimer.Stop();
             output.AllowClose = true;
             output.Close();
             appearanceClosed = true;
@@ -238,15 +249,7 @@ public partial class MainWindow : Window
     }
     void MethodChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (MethodHint is null) return;
-        MethodHint.Text = ((Method.SelectedItem as ComboBoxItem)?.Tag as string) switch
-        {
-            "LdrLoadDll" => "Native Windows loader through a small stub.",
-            "LdrpLoader" => "Experimental. x64 build 26300; verified ntdll only.",
-            "ThreadHijacking" => "Uses an existing thread; temporarily changes its context.",
-            "ManualMap" => "Experimental. No TLS, delay imports or unload.",
-            _ => "Standard Windows loader."
-        };
+        if (Method is not null) Method.ToolTip = (Method.SelectedItem as ComboBoxItem)?.ToolTip;
     }
     void Write(string text)
     {
@@ -254,22 +257,55 @@ public partial class MainWindow : Window
         LogCount.Text = (++logEntries).ToString(); Log.ScrollToEnd();
     }
     async void RefreshClick(object sender, RoutedEventArgs e) => await RefreshTargets();
-    async Task RefreshTargets()
+    async Task RefreshTargets(bool automatic = false)
     {
-        if (busy || refreshing) return;
-        refreshing = true; RefreshButton.IsEnabled = false; UpdateAction(); Status.Text = "Enumerating processes…";
+        if (busy || enumeratingProcesses || appearanceClosed) return;
+        enumeratingProcesses = true;
+        if (!automatic)
+        {
+            refreshing = true; RefreshButton.IsEnabled = false; UpdateAction();
+            Status.Text = "Enumerating processes…";
+        }
         try
         {
-            targets = await Task.Run(() => ProcessCatalog.GetTargets()
+            var refreshed = await Task.Run(() => ProcessCatalog.GetTargets()
                 .Select(target => new ProcessListItem(target, ProcessIconProvider.Get(target.Id))).ToList());
-            selectedProcess = targets.FirstOrDefault(p => p.Id == selectedProcess?.Id && p.Target.Started == selectedProcess.Target.Started);
-            UpdateSelectedProcess();
-            Filter(); Status.Text = $"{targets.Count} processes available.";
+            if (appearanceClosed) return;
+            // Loading can start while a silent refresh is running. Discard its result
+            // rather than touching the selection or controls during that operation.
+            if (automatic && (busy || AutoRefreshProcesses.IsChecked != true || !ProcessPicker.IsOpen)) return;
+            var previous = targets.ToDictionary(p => p.Target);
+            targets = refreshed.Select(p => previous.GetValueOrDefault(p.Target) ?? p).ToList();
+            var selection = targets.FirstOrDefault(p => p.Id == selectedProcess?.Id && p.Target.Started == selectedProcess.Target.Started);
+            if (!ReferenceEquals(selectedProcess, selection))
+            {
+                selectedProcess = selection;
+                UpdateSelectedProcess();
+            }
+            Filter();
+            if (!automatic) Status.Text = $"{targets.Count} processes available.";
         }
-        catch (Exception ex) { Write("Process enumeration failed: " + ex.Message); Status.Text = "Process enumeration failed"; ShowOutput(); }
-        finally { refreshing = false; RefreshButton.IsEnabled = true; UpdateAction(); }
+        catch (Exception ex)
+        {
+            if (appearanceClosed) return;
+            if (automatic && (busy || AutoRefreshProcesses.IsChecked != true || !ProcessPicker.IsOpen)) return;
+            if (automatic) AutoRefreshProcesses.IsChecked = false;
+            Write("Process enumeration failed: " + ex.Message); Status.Text = "Process enumeration failed";
+            if (!automatic) ShowOutput();
+        }
+        finally
+        {
+            enumeratingProcesses = false;
+            if (!automatic) { refreshing = false; RefreshButton.IsEnabled = !busy; UpdateAction(); }
+        }
     }
     void SearchChanged(object sender, TextChangedEventArgs e) { if (Processes is not null) Filter(); }
+    void AutoRefreshChanged(object sender, RoutedEventArgs e)
+    {
+        if (!sessionReady) return;
+        sessionPreferences.AutoRefreshProcesses = AutoRefreshProcesses.IsChecked == true;
+        SaveSession();
+    }
     void WindowFilterChanged(object sender, RoutedEventArgs e)
     {
         if (Processes is not null) Filter();
@@ -279,7 +315,16 @@ public partial class MainWindow : Window
     {
         var selectedId = selectedProcess?.Id;
         var shown = targets.Where(p => (MainWindowsOnly.IsChecked != true || !string.IsNullOrWhiteSpace(p.Target.WindowTitle)) && $"{p.Name} {p.Id} {p.Target.WindowTitle}".Contains(Search.Text, StringComparison.OrdinalIgnoreCase)).ToList();
-        Processes.ItemsSource = shown;
+        // Keep surviving rows in place so periodic refreshes preserve focus and scrolling.
+        for (var i = shownTargets.Count - 1; i >= 0; i--)
+            if (!shown.Contains(shownTargets[i])) shownTargets.RemoveAt(i);
+        for (var i = 0; i < shown.Count; i++)
+        {
+            if (i < shownTargets.Count && ReferenceEquals(shownTargets[i], shown[i])) continue;
+            var existing = shownTargets.IndexOf(shown[i]);
+            if (existing >= 0) shownTargets.Move(existing, i);
+            else shownTargets.Insert(i, shown[i]);
+        }
         Processes.SelectedItem = shown.FirstOrDefault(p => p.Id == selectedId);
         ProcessCount.Text = shown.Count == targets.Count ? $"{targets.Count}" : $"{shown.Count}/{targets.Count}";
     }
@@ -319,7 +364,10 @@ public partial class MainWindow : Window
         var exists = await Task.Run(() => File.Exists(path));
         if (version != fileSelectionVersion || busy || appearanceClosed) return;
         if (!exists || !string.Equals(Path.GetExtension(path), ".dll", StringComparison.OrdinalIgnoreCase)) { Write("Select an existing .dll file."); return; }
-                dllPath = Path.GetFullPath(path); FileNameLabel.Text = dllPath; UpdateAction();
+        dllPath = Path.GetFullPath(path);
+        FileNameLabel.Text = Path.GetFileName(dllPath);
+        FileDetailLabel.Text = dllPath;
+        UpdateAction();
         sessionPreferences.RecentLibraries.RemoveAll(p => string.Equals(p, dllPath, StringComparison.OrdinalIgnoreCase));
         sessionPreferences.RecentLibraries.Insert(0, dllPath);
         sessionPreferences.RecentLibraries = sessionPreferences.RecentLibraries.Take(8).ToList();
@@ -366,7 +414,7 @@ public partial class MainWindow : Window
     void SetBusy(bool value)
     {
         busy = value; Method.IsEnabled = Processes.IsEnabled = Search.IsEnabled = BrowseButton.IsEnabled = RefreshButton.IsEnabled = DropArea.AllowDrop = !value;
-        RecentLibraries.IsEnabled = !value; MainWindowsOnly.IsEnabled = !value;
+        RecentLibraries.IsEnabled = !value; MainWindowsOnly.IsEnabled = AutoRefreshProcesses.IsEnabled = !value;
         InspectButton.IsEnabled = !value;
         ProcessPickerToggle.IsEnabled = !value;
         if (value) ProcessPickerToggle.IsChecked = false;
@@ -386,6 +434,7 @@ public partial class MainWindow : Window
         });
         sessionPreferences.RecentLibraries = (sessionPreferences.RecentLibraries ?? new()).Where(p => !string.IsNullOrWhiteSpace(p)).Distinct(StringComparer.OrdinalIgnoreCase).Take(8).ToList();
         MainWindowsOnly.IsChecked = sessionPreferences.MainWindowsOnly;
+        AutoRefreshProcesses.IsChecked = sessionPreferences.AutoRefreshProcesses;
         UpdateRecentLibraries(); sessionReady = true;
     }
     void SaveSession()
@@ -393,6 +442,7 @@ public partial class MainWindow : Window
         var snapshot = new SessionPreferences
         {
             MainWindowsOnly = sessionPreferences.MainWindowsOnly,
+            AutoRefreshProcesses = sessionPreferences.AutoRefreshProcesses,
             RecentLibraries = sessionPreferences.RecentLibraries.ToList()
         };
         pendingSessionSave = SaveSessionSnapshot(snapshot);
